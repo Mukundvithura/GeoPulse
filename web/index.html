@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GeoPulse</title>
+<script src="https://unpkg.com/globe.gl@2.34.5/dist/globe.gl.min.js"></script>
+<style>
+  :root {
+    --bg: #0b0f14; --panel: #121820; --line: #1f2933;
+    --text: #dbe4e9; --dim: #7a8894;
+    --stable: #2E7D52; --elevated: #B9931F; --breaking: #D0722A;
+    --conflict: #C0392B; --grey: #3a424c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.5 system-ui, sans-serif; overflow: hidden; }
+  #globe { position: absolute; inset: 0; }
+  header { position: absolute; top: 16px; left: 20px; z-index: 10; }
+  header h1 { margin: 0; font-size: 20px; letter-spacing: .04em; }
+  header h1 span { color: #C2693A; }
+  header p { margin: 2px 0 0; color: var(--dim); font-size: 12px; }
+  #legend { position: absolute; bottom: 16px; left: 20px; z-index: 10;
+            display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; }
+  #legend span { display: flex; align-items: center; gap: 5px; color: var(--dim); }
+  #legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  #panel { position: absolute; top: 0; right: 0; bottom: 0; width: min(380px, 90vw);
+           background: var(--panel); border-left: 1px solid var(--line); z-index: 20;
+           padding: 20px; overflow-y: auto; display: none; }
+  #panel.open { display: block; }
+  #panel .close { float: right; background: none; border: 1px solid var(--line);
+                  color: var(--dim); border-radius: 4px; cursor: pointer; padding: 2px 9px; }
+  #panel h2 { margin: 0 0 4px; font-size: 18px; }
+  .lvl { display: inline-block; padding: 2px 10px; border-radius: 12px;
+         font-size: 11px; font-weight: 700; text-transform: uppercase;
+         letter-spacing: .08em; color: #fff; margin-bottom: 12px; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }
+  .stats div { background: var(--bg); border: 1px solid var(--line);
+               border-radius: 6px; padding: 8px 10px; }
+  .stats b { display: block; font-size: 18px; }
+  .stats small { color: var(--dim); }
+  .ev { border-top: 1px solid var(--line); padding: 10px 0; font-size: 13px; }
+  .ev .who { color: var(--text); }
+  .ev .meta { color: var(--dim); font-size: 11px; margin-top: 2px; }
+  .ev a { color: #6db3ae; text-decoration: none; }
+  #status { position: absolute; top: 16px; right: 20px; z-index: 10;
+            color: var(--dim); font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="globe"></div>
+<header>
+  <h1>Geo<span>Pulse</span></h1>
+  <p>Live geopolitical activity &middot; GDELT &middot; last 3 days</p>
+</header>
+<div id="status">loading&hellip;</div>
+<div style="position:absolute;top:14px;left:50%;transform:translateX(-50%);z-index:10;width:min(360px,50vw)">
+  <input id="search" type="search" placeholder="Search events &amp; news&hellip; (Enter)"
+    style="width:100%;background:var(--panel);border:1px solid var(--line);color:var(--text);
+    border-radius:18px;padding:7px 14px;font:inherit;outline:none">
+</div>
+<div id="legend">
+  <span><i style="background:var(--stable)"></i>Stable</span>
+  <span><i style="background:var(--elevated)"></i>Elevated</span>
+  <span><i style="background:var(--breaking)"></i>Breaking</span>
+  <span><i style="background:var(--conflict)"></i>Conflict</span>
+  <span><i style="background:var(--grey)"></i>No signal</span>
+</div>
+<div id="panel">
+  <button class="close" onclick="panel.classList.remove('open')">&times;</button>
+  <div id="panel-body"></div>
+</div>
+
+<script>
+const COLORS = {
+  stable:  "#2E7D52", elevated: "#B9931F",
+  breaking: "#D0722A", conflict: "#C0392B", none: "#3a424c",
+};
+const CAMEO_ROOT = {
+  "01":"Statement","02":"Appeal","03":"Intent to cooperate","04":"Consult",
+  "05":"Diplomatic cooperation","06":"Material cooperation","07":"Aid",
+  "08":"Yield","09":"Investigate","10":"Demand","11":"Disapprove",
+  "12":"Reject","13":"Threaten","14":"Protest","15":"Show force",
+  "16":"Reduce relations","17":"Coerce","18":"Assault","19":"Fight",
+  "20":"Mass violence",
+};
+const panel = document.getElementById("panel");
+const panelBody = document.getElementById("panel-body");
+const statusEl = document.getElementById("status");
+let riskByIso = {};
+
+const globe = Globe()(document.getElementById("globe"))
+  .backgroundColor("#0b0f14")
+  .globeImageUrl("https://unpkg.com/three-globe/example/img/earth-night.jpg")
+  .polygonAltitude(0.008)
+  .polygonStrokeColor(() => "#0b0f14")
+  .polygonCapColor(f => {
+    const r = riskByIso[f.properties.ADM0_A3];
+    return r ? COLORS[r.level] + "cc" : COLORS.none + "99";
+  })
+  .polygonLabel(f => {
+    const r = riskByIso[f.properties.ADM0_A3];
+    const name = f.properties.NAME || f.properties.ADM0_A3;
+    return `<b>${name}</b><br>${r ? r.level + " &middot; " + r.total + " events" : "no signal"}`;
+  })
+  .onPolygonClick(f => openPanel(f.properties.ADM0_A3, f.properties.NAME));
+
+async function load() {
+  const [countriesRes, riskRes] = await Promise.all([
+    fetch("countries.geojson"),
+    fetch("/api/countries"),
+  ]);
+  const geo = await countriesRes.json();
+  const risks = await riskRes.json();
+  const oldRisk = riskByIso;
+  riskByIso = Object.fromEntries(risks.map(r => [r.iso3, r]));
+  if (Object.keys(oldRisk).length) checkAlerts(oldRisk, riskByIso);
+  globe.polygonsData(geo.features.filter(f => f.properties.ADM0_A3 !== "ATA"));
+  const colored = risks.length;
+  statusEl.textContent = `${colored} countries with activity`;
+}
+
+async function openPanel(iso3, name) {
+  panel.classList.add("open");
+  panelBody.innerHTML = `<h2>${name}</h2><p style="color:var(--dim)">loading&hellip;</p>`;
+  const res = await fetch(`/api/country/${iso3}`);
+  if (!res.ok) {
+    panelBody.innerHTML = `<h2>${name}</h2><p style="color:var(--dim)">No recent events.</p>`;
+    return;
+  }
+  const d = await res.json();
+  const b = d.breakdown;
+  const watched = getWatchlist().includes(iso3);
+  panelBody.innerHTML = `
+    <h2>${name}
+      <button onclick="toggleWatch('${iso3}', '${name.replace(/'/g, "")}')"
+        style="font:600 11px system-ui;letter-spacing:.06em;cursor:pointer;
+        background:${watched ? "var(--conflict)" : "transparent"};
+        color:${watched ? "#fff" : "var(--dim)"};border:1px solid var(--line);
+        border-radius:12px;padding:3px 10px;vertical-align:middle">
+        ${watched ? "WATCHING" : "WATCH"}</button></h2>
+    <span class="lvl" style="background:${COLORS[d.level]}">${d.level}</span>
+    <div id="ai-summary" style="background:var(--bg);border:1px solid var(--line);
+      border-radius:6px;padding:10px 12px;font-size:13px;color:var(--dim)">
+      Generating AI summary&hellip; (local model, ~30s on first click)</div>
+    <div id="related" style="margin:10px 0"></div>
+    <div class="stats">
+      <div><b>${b.total}</b><small>events / ${d.window_days}d</small></div>
+      <div><b>${b.quad4}</b><small>material conflict</small></div>
+      <div><b>${b.violent}</b><small>violent (18/19/20)</small></div>
+      <div><b>${b.total ? Math.round(100 * b.multi_source / b.total) : 0}%</b>
+        <small>multi-source</small></div>
+    </div>
+    <div id="relations"></div>
+    ${d.headlines && d.headlines.length ? `
+    <h3 style="font-size:13px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em">
+      Latest headlines</h3>
+    ${d.headlines.map(h => `
+      <div class="ev">
+        <div class="who"><a href="${h.url}" target="_blank" rel="noopener">${h.title}</a></div>
+        <div class="meta">${h.source}${h.published ? " &middot; " + h.published.slice(0, 16) : ""}</div>
+        ${h.entities && h.entities.length ? `<div class="meta">${
+          h.entities.slice(0, 6).map(e => `<span style="border:1px solid var(--line);
+            border-radius:10px;padding:0 7px;margin-right:4px">${e.text}</span>`).join("")
+        }</div>` : ""}
+      </div>`).join("")}` : ""}
+    <h3 style="font-size:13px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em">
+      Top events</h3>
+    ${d.events.map(e => `
+      <div class="ev">
+        <div class="who">${e.actor1 || "?"} &rarr; ${e.actor2 || "?"}
+          &middot; ${CAMEO_ROOT[e.cameo_root] || e.cameo_root}
+          <span title="confidence: ${e.confidence} (source count)" style="color:${
+            {high: "var(--stable)", medium: "var(--elevated)", low: "var(--dim)"}[e.confidence]
+          };font-size:11px">&#9679; ${e.confidence}</span></div>
+        <div class="meta">${e.date} &middot; ${e.place || ""} &middot;
+          ${e.articles} articles
+          ${e.url ? `&middot; <a href="${e.url}" target="_blank" rel="noopener">source</a>` : ""}
+        </div>
+      </div>`).join("")}
+  `;
+  loadSummary(iso3);
+  loadRelated(iso3);
+  loadRelations(iso3);
+}
+
+async function loadRelations(iso3) {
+  const el = document.getElementById("relations");
+  try {
+    const rows = await (await fetch(`/api/country/${iso3}/relations`)).json();
+    if (!rows.length) return;
+    el.innerHTML = `<h3 style="font-size:13px;color:var(--dim);
+      text-transform:uppercase;letter-spacing:.08em">Who did what</h3>` +
+      rows.map(r => `
+        <div class="ev">
+          <div class="who"><b>${r.actor}</b>
+            <span style="color:var(--breaking)">${r.action}</span>
+            <b>${r.target}</b>${r.instrument ? ` <span style="color:var(--dim)">
+              using ${r.instrument}</span>` : ""}</div>
+          <div class="meta"><a href="${r.url}" target="_blank" rel="noopener">source</a></div>
+        </div>`).join("");
+  } catch { /* extractor hasn't run yet */ }
+}
+
+/* ---- watchlist + browser alerts ---- */
+function getWatchlist() {
+  try { return JSON.parse(localStorage.watchlist || "[]"); } catch { return []; }
+}
+function toggleWatch(iso3, name) {
+  let w = getWatchlist();
+  if (w.includes(iso3)) w = w.filter(x => x !== iso3);
+  else {
+    w.push(iso3);
+    if (Notification.permission === "default") Notification.requestPermission();
+  }
+  localStorage.watchlist = JSON.stringify(w);
+  openPanel(iso3, name);  // re-render the button
+}
+function checkAlerts(oldRisk, newRisk) {
+  for (const iso3 of getWatchlist()) {
+    const was = (oldRisk[iso3] || {}).level || "stable";
+    const now = (newRisk[iso3] || {}).level || "stable";
+    if (was !== now && Notification.permission === "granted") {
+      new Notification(`GeoPulse: ${iso3}`, {
+        body: `Risk level changed: ${was} → ${now}`,
+      });
+    }
+  }
+}
+
+/* ---- search ---- */
+document.getElementById("search").addEventListener("keydown", async ev => {
+  if (ev.key !== "Enter") return;
+  const q = ev.target.value.trim();
+  if (!q) return;
+  panel.classList.add("open");
+  panelBody.innerHTML = `<h2>Search: ${q}</h2><p style="color:var(--dim)">searching&hellip;</p>`;
+  const d = await (await fetch(`/api/search?q=${encodeURIComponent(q)}`)).json();
+  panelBody.innerHTML = `<h2>Search: ${q}</h2>
+    ${d.articles.length ? `<h3 style="font-size:13px;color:var(--dim);
+      text-transform:uppercase;letter-spacing:.08em">News</h3>` +
+      d.articles.map(a => `<div class="ev">
+        <div class="who"><a href="${a.url}" target="_blank" rel="noopener">${a.title}</a></div>
+        <div class="meta">${a.source} &middot; ${(a.countries || []).join(", ")}</div>
+      </div>`).join("") : ""}
+    ${d.events.length ? `<h3 style="font-size:13px;color:var(--dim);
+      text-transform:uppercase;letter-spacing:.08em">Events</h3>` +
+      d.events.map(e => `<div class="ev">
+        <div class="who">${e.actor1 || "?"} &rarr; ${e.actor2 || "?"}</div>
+        <div class="meta">${e.date} &middot; ${e.iso3} &middot; ${e.place || ""}
+          ${e.url ? `&middot; <a href="${e.url}" target="_blank" rel="noopener">source</a>` : ""}</div>
+      </div>`).join("") : ""}
+    ${!d.articles.length && !d.events.length ? `<p style="color:var(--dim)">No results.</p>` : ""}`;
+});
+
+async function loadSummary(iso3) {
+  const el = document.getElementById("ai-summary");
+  try {
+    const res = await fetch(`/api/country/${iso3}/summary`);
+    if (!res.ok) { el.textContent = "No summary available."; return; }
+    const d = await res.json();
+    el.style.color = "var(--text)";
+    el.textContent = d.summary;
+  } catch { el.textContent = "Summary engine offline (is Ollama running?)"; }
+}
+
+async function loadRelated(iso3) {
+  const el = document.getElementById("related");
+  try {
+    const rows = await (await fetch(`/api/country/${iso3}/related`)).json();
+    if (!rows.length) return;
+    el.innerHTML = `<span style="color:var(--dim);font-size:11px;
+      text-transform:uppercase;letter-spacing:.08em">Related:</span> ` +
+      rows.map(r => `<span title="via ${(r.via || []).join(", ")}"
+        style="border:1px solid var(--line);border-radius:10px;padding:1px 8px;
+        margin-right:4px;font-size:12px">${r.iso3} (${r.links})</span>`).join("");
+  } catch { /* graph offline — skip quietly */ }
+}
+
+load();
+setInterval(load, 60000);  // live refresh: recolor the globe every minute
+</script>
+</body>
+</html>

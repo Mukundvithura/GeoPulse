@@ -1,0 +1,22 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: geopulse-db
+    environment:
+      POSTGRES_USER: geopulse
+      POSTGRES_PASSWORD: geopulse
+      POSTGRES_DB: geopulse
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
+
+  graph:
+    image: memgraph/memgraph:latest
+    container_name: geopulse-graph
+    ports:
+      - "7687:7687"
+
+volumes:
+  pgdata:
