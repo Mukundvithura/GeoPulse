@@ -53,6 +53,3 @@ Open http://localhost:8000 — click any colored country.
 - **Alerts**: Watch button per country; browser notification when a watched country's risk level changes
 - **Search**: full-text over news + actor/place search over events (search box, press Enter)
 - **Confidence**: per-event high/medium/low from source count; % multi-source per country
-- **Go online**: `cloudflared tunnel --url http://localhost:8000` gives a public URL while your laptop runs
-
-Not yet: historical replay, compare countries (later).
