@@ -1,0 +1,9 @@
+# Test-only dependencies.
+#
+# Kept separate from requirements.txt so that installing the app to run it --
+# on the laptop or on a deploy -- never pulls in test tooling.
+#
+#   pip install -r requirements.txt -r requirements-dev.txt
+#   python -m pytest
+
+pytest==9.0.3
