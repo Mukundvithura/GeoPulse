@@ -10,7 +10,13 @@ services:
       - "6543:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
+      # Applied in phase order on first boot of an empty volume. The numeric
+      # prefix is container-side only, so the files keep their names on disk.
+      # phase4 has an FK onto phase2's articles table, so order matters.
+      - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./schema_phase2.sql:/docker-entrypoint-initdb.d/02-schema_phase2.sql
+      - ./schema_phase3.sql:/docker-entrypoint-initdb.d/03-schema_phase3.sql
+      - ./schema_phase4.sql:/docker-entrypoint-initdb.d/04-schema_phase4.sql
 
   graph:
     image: memgraph/memgraph:latest
