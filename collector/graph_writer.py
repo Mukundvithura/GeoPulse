@@ -16,7 +16,7 @@ import sys
 import psycopg
 from neo4j import GraphDatabase
 
-PG_URL = "postgresql://geopulse:geopulse@localhost:5432/geopulse"
+PG_URL = "postgresql://geopulse:geopulse@localhost:6543/geopulse"
 MEMGRAPH_URL = "bolt://localhost:7687"
 WINDOW_DAYS = 3
 

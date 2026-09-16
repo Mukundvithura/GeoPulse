@@ -14,7 +14,7 @@ import sys
 import psycopg
 import requests
 
-DB_URL = "postgresql://geopulse:geopulse@localhost:5432/geopulse"
+DB_URL = "postgresql://geopulse:geopulse@localhost:6543/geopulse"
 OLLAMA_URL = "http://localhost:11434/api/generate"
 MODEL = "llama3.2:3b"
 

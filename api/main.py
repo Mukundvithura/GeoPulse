@@ -17,7 +17,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-DB_URL = "postgresql://geopulse:geopulse@localhost:5432/geopulse"
+DB_URL = "postgresql://geopulse:geopulse@localhost:6543/geopulse"
 MEMGRAPH_URL = "bolt://localhost:7687"
 OLLAMA_URL = "http://localhost:11434/api/generate"
 OLLAMA_MODEL = "llama3.2:3b"
@@ -56,7 +56,8 @@ def countries():
                COUNT(*) FILTER (WHERE quad_class = 4)                    AS quad4,
                COUNT(*) FILTER (WHERE quad_class = 3)                    AS quad3,
                COUNT(*) FILTER (WHERE cameo_root IN ('18','19','20'))    AS violent,
-               COUNT(*)                                                  AS total
+               COUNT(*)                                                  AS total,
+               COUNT(*) FILTER (WHERE num_sources >= 2)                  AS multi_source
         FROM events
         WHERE event_date >= CURRENT_DATE - %s
         GROUP BY country_iso3
@@ -71,8 +72,9 @@ def countries():
             "quad3": quad3,
             "violent": violent,
             "total": total,
+            "multi_source": multi_source,
         }
-        for iso3, quad4, quad3, violent, total in rows
+        for iso3, quad4, quad3, violent, total, multi_source in rows
     ]
 
 
@@ -236,12 +238,13 @@ def summary(iso3: str):
     """Grounded LLM summary via local Ollama, cached for a few hours."""
     iso3 = iso3.upper()
     cached = query(
-        "SELECT summary, generated_at FROM summaries WHERE iso3 = %s "
+        "SELECT summary, model, generated_at FROM summaries WHERE iso3 = %s "
         "AND generated_at > now() - make_interval(hours => %s)",
         (iso3, SUMMARY_TTL_HOURS),
     )
     if cached:
-        return {"iso3": iso3, "summary": cached[0][0], "cached": True}
+        return {"iso3": iso3, "summary": cached[0][0],
+                "model": cached[0][1], "cached": True}
 
     events = query(
         """
@@ -287,7 +290,7 @@ def summary(iso3: str):
             (iso3, text, OLLAMA_MODEL),
         )
         conn.commit()
-    return {"iso3": iso3, "summary": text, "cached": False}
+    return {"iso3": iso3, "summary": text, "model": OLLAMA_MODEL, "cached": False}
 
 
 @app.get("/")

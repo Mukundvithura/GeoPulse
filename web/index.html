@@ -4,78 +4,398 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GeoPulse</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@400;500;600;700&family=Spectral:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/globe.gl@2.34.5/dist/globe.gl.min.js"></script>
 <style>
   :root {
-    --bg: #0b0f14; --panel: #121820; --line: #1f2933;
-    --text: #dbe4e9; --dim: #7a8894;
-    --stable: #2E7D52; --elevated: #B9931F; --breaking: #D0722A;
-    --conflict: #C0392B; --grey: #3a424c;
+    /* chart paper + engraved ink */
+    --paper:      #E9E7DC;
+    --paper-deep: #DFDCCD;
+    --ink:        #16252E;
+    --ink-2:      #47585F;
+    --ink-3:      #54626A;
+    --survey:     #6E8CA0;
+    --rule:       #B6AC93;
+    --rule-fine:  #CCC3AC;
+
+    /* activity tints — chart tint vocabulary, monotonic in weight */
+    --t-none:     #E9E7DC;
+    --t-stable:   #CCC3A4;
+    --t-elevated: #DFB24C;
+    --t-breaking: #CE7724;
+    --t-conflict: #C2185B;
+
+    --frame: 15px;
   }
+
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text);
-         font: 14px/1.5 system-ui, sans-serif; overflow: hidden; }
+
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Archivo Narrow", "Arial Narrow", system-ui, sans-serif;
+    font-size: 13.5px; font-weight: 400; line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---- browser surfaces, themed from the chart palette ---- */
+  ::selection { background: var(--t-conflict); color: #FFF7FA; }
+  ::-webkit-scrollbar { width: 11px; height: 11px; }
+  ::-webkit-scrollbar-track { background: var(--paper-deep); border-left: 1px solid var(--rule-fine); }
+  ::-webkit-scrollbar-thumb { background: var(--rule); border: 3px solid var(--paper-deep); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--ink-2); }
+  * { scrollbar-width: thin; scrollbar-color: var(--rule) var(--paper-deep); }
+  :focus-visible { outline: 2px solid var(--t-conflict); outline-offset: 2px; }
+  a { color: var(--ink); text-decoration: underline; text-decoration-thickness: 1px;
+      text-underline-offset: 2.5px; text-decoration-color: var(--rule); }
+  a:hover { text-decoration-color: var(--t-conflict); color: var(--t-conflict); }
+
+  /* ---- the sheet: graduated tick border, chart tooth ---- */
+  #sheet {
+    position: fixed; inset: 0;
+    padding: var(--frame);
+    background:
+      repeating-linear-gradient(90deg, var(--ink) 0 9px, transparent 9px 18px) left top / 100% 5px repeat-x,
+      repeating-linear-gradient(90deg, var(--ink) 0 9px, transparent 9px 18px) left bottom / 100% 5px repeat-x,
+      repeating-linear-gradient(180deg, var(--ink) 0 9px, transparent 9px 18px) left top / 5px 100% repeat-y,
+      repeating-linear-gradient(180deg, var(--ink) 0 9px, transparent 9px 18px) right top / 5px 100% repeat-y,
+      url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='t'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23t)' opacity='0.05'/%3E%3C/svg%3E"),
+      var(--paper);
+  }
+  #field {
+    position: absolute; inset: var(--frame);
+    border: 1px solid var(--ink);
+    overflow: hidden;
+  }
   #globe { position: absolute; inset: 0; }
-  header { position: absolute; top: 16px; left: 20px; z-index: 10; }
-  header h1 { margin: 0; font-size: 20px; letter-spacing: .04em; }
-  header h1 span { color: #C2693A; }
-  header p { margin: 2px 0 0; color: var(--dim); font-size: 12px; }
-  #legend { position: absolute; bottom: 16px; left: 20px; z-index: 10;
-            display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; }
-  #legend span { display: flex; align-items: center; gap: 5px; color: var(--dim); }
-  #legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-  #panel { position: absolute; top: 0; right: 0; bottom: 0; width: min(380px, 90vw);
-           background: var(--panel); border-left: 1px solid var(--line); z-index: 20;
-           padding: 20px; overflow-y: auto; display: none; }
-  #panel.open { display: block; }
-  #panel .close { float: right; background: none; border: 1px solid var(--line);
-                  color: var(--dim); border-radius: 4px; cursor: pointer; padding: 2px 9px; }
-  #panel h2 { margin: 0 0 4px; font-size: 18px; }
-  .lvl { display: inline-block; padding: 2px 10px; border-radius: 12px;
-         font-size: 11px; font-weight: 700; text-transform: uppercase;
-         letter-spacing: .08em; color: #fff; margin-bottom: 12px; }
-  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }
-  .stats div { background: var(--bg); border: 1px solid var(--line);
-               border-radius: 6px; padding: 8px 10px; }
-  .stats b { display: block; font-size: 18px; }
-  .stats small { color: var(--dim); }
-  .ev { border-top: 1px solid var(--line); padding: 10px 0; font-size: 13px; }
-  .ev .who { color: var(--text); }
-  .ev .meta { color: var(--dim); font-size: 11px; margin-top: 2px; }
-  .ev a { color: #6db3ae; text-decoration: none; }
-  #status { position: absolute; top: 16px; right: 20px; z-index: 10;
-            color: var(--dim); font-size: 12px; }
+
+  /* ---- chart panels: ruled blocks in the sheet's clear areas ---- */
+  .block {
+    position: absolute; z-index: 10;
+    background: rgba(233, 231, 220, 0.94);
+    border: 1px solid var(--ink);
+    padding: 10px 13px 12px;
+  }
+  .block h2, .block h3 { margin: 0; }
+
+  .tblock { top: 0; left: 0; width: 336px; border-width: 0 1px 1px 0; }
+  .tblock h1 {
+    margin: 0;
+    font-family: "Spectral", Georgia, serif;
+    font-size: 25px; font-weight: 600; line-height: 1;
+    letter-spacing: .1em; text-transform: uppercase;
+  }
+  .tblock .sub {
+    font-family: "Archivo Narrow", "Arial Narrow", system-ui, sans-serif;
+    font-size: 11.5px; font-weight: 400; line-height: 1;
+    letter-spacing: .17em; text-transform: uppercase; color: var(--ink-2);
+    margin-top: 5px;
+  }
+  .rule    { height: 1px; background: var(--ink); margin: 9px 0; }
+  .rule-f  { height: 1px; background: var(--rule-fine); margin: 8px 0; }
+
+  .meta-row { display: flex; justify-content: space-between; flex-wrap: wrap;
+              gap: 2px 14px;
+              font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase;
+              color: var(--ink-2); }
+  .meta-row > * { min-width: 0; }
+  .meta-row b { color: var(--ink); font-weight: 600; letter-spacing: 0; }
+
+  #search {
+    width: 100%; margin-top: 9px;
+    background: transparent; border: 0; border-bottom: 1px solid var(--rule);
+    color: var(--ink);
+    font-family: "Archivo Narrow", "Arial Narrow", system-ui, sans-serif;
+    font-size: 13.5px; font-weight: 400; line-height: 1.6;
+    padding: 2px 0; outline: none;
+  }
+  #search::placeholder { color: var(--ink-3); font-style: italic;
+                         font-family: "Spectral", Georgia, serif; }
+  #search:focus { border-bottom-color: var(--t-conflict); }
+
+  /* tint key, lower left */
+  .keyblock { bottom: 0; left: 0; width: 336px; border-width: 1px 1px 0 0; }
+  .label {
+    font-family: "Archivo Narrow", "Arial Narrow", system-ui, sans-serif;
+    font-size: 11px; font-weight: 600; line-height: 1;
+    letter-spacing: .19em; text-transform: uppercase; color: var(--ink-2);
+  }
+  .keys-head {
+    display: flex; margin-top: 9px; padding-bottom: 5px;
+    border-bottom: 1px solid var(--rule-fine);
+    font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--ink-2);
+  }
+  .keys-head b { margin-left: auto; font-weight: 600; width: 2.4em;
+                 text-align: right; letter-spacing: 0; }
+  .keys { display: grid; gap: 5px; margin-top: 7px; }
+  .keys div { display: flex; align-items: center; gap: 9px; font-size: 13.5px; }
+  .keys b { font-weight: 600; width: 2.4em; text-align: right; }
+  .sw { width: 26px; height: 11px; border: 1px solid var(--ink); flex: none; }
+  .sw-conflict {
+    background:
+      repeating-linear-gradient(45deg, #8E0F40 0 2px, transparent 2px 5px),
+      var(--t-conflict);
+  }
+  .keys small { margin-left: auto; color: var(--ink-3); font-size: 11px;
+                letter-spacing: .06em; }
+
+  /* right column: reliability diagram over the active-areas register */
+  #rightcol {
+    position: absolute; top: 0; right: 0; bottom: 0; width: 248px; z-index: 10;
+    border-left: 1px solid var(--ink);
+    background: rgba(233, 231, 220, 0.94);
+    display: flex; flex-direction: column;
+    animation: ink .62s cubic-bezier(.16,1,.3,1) .16s both;
+  }
+  #rightcol[hidden] { display: none; }
+  #rightcol .block { position: static; border: 0; animation: none;
+                     background: transparent; }
+  .relblock { border-bottom: 1px solid var(--ink) !important; }
+  .actblock { flex: 1; min-height: 0; display: flex; flex-direction: column;
+              padding-bottom: 11px; }
+
+  /* multi-source share, plotted against a graduated scale */
+  .plot { margin: 11px 0 0; }
+  .plot-bar { position: relative; height: 17px; border: 1px solid var(--ink);
+              background: var(--paper-deep); overflow: hidden; }
+  .plot-bar span { display: block; height: 100%; background: var(--survey); }
+  .plot-bar i { position: absolute; top: 0; bottom: 0; width: 1px;
+                background: var(--ink); opacity: .45; }
+  .plot-axis { display: flex; justify-content: space-between; margin-top: 3px;
+               font-size: 11px; letter-spacing: .06em; color: var(--ink-3); }
+  .plot .meta-row { margin-top: 8px; }
+
+  #active { margin-top: 9px; overflow-y: auto; flex: 1; min-height: 0;
+            margin-right: -13px; padding-right: 9px; }
+  .act-row {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    background: transparent; border: 0; border-bottom: 1px solid var(--rule-fine);
+    padding: 6px 0; cursor: pointer; text-align: left;
+    font-family: "Archivo Narrow", "Arial Narrow", system-ui, sans-serif;
+    font-size: 13.5px; font-weight: 400; line-height: 1.35; color: var(--ink);
+  }
+  .act-row:hover { background: var(--paper-deep); }
+  .act-row .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .act-row .n { margin-left: auto; font-weight: 600; font-size: 13.5px; }
+  .act-row .u { color: var(--ink-3); font-size: 11px; letter-spacing: .06em; }
+
+  /* ---- inset panel ---- */
+  #inset {
+    position: absolute; top: 0; right: 0; bottom: 0; width: min(432px, 94vw);
+    z-index: 30; background: var(--paper);
+    border-left: 1px solid var(--ink);
+    padding: 0; overflow-y: auto; display: none;
+  }
+  #inset.open { display: block; }
+  #inset .pad { padding: 12px 16px 28px; }
+  .inset-head {
+    position: sticky; top: 0; z-index: 2;
+    background: var(--paper); border-bottom: 1px solid var(--ink);
+    padding: 11px 16px 10px;
+  }
+  .inset-head h2 {
+    font-family: "Spectral", Georgia, serif;
+    font-size: 22px; font-weight: 500; line-height: 1.1; letter-spacing: .015em;
+    padding-right: 34px; display: flex; align-items: baseline; gap: 10px;
+  }
+  .inset-head h2 .desig {
+    margin-left: auto; flex: none;
+    font-family: "Archivo Narrow", "Arial Narrow", system-ui, sans-serif;
+    font-size: 11px; font-weight: 600; line-height: 1;
+    letter-spacing: .19em; text-transform: uppercase; color: var(--ink-2);
+  }
+  .iso { color: var(--ink-3); font-size: 15px; letter-spacing: .08em; }
+  .close {
+    position: absolute; top: 11px; right: 14px;
+    width: 24px; height: 24px; padding: 0; cursor: pointer;
+    background: transparent; border: 1px solid var(--rule); color: var(--ink);
+    display: grid; place-items: center;
+  }
+  .close:hover { border-color: var(--t-conflict); color: var(--t-conflict); }
+
+  .class-line {
+    display: flex; align-items: center; gap: 10px;
+    border: 1px solid var(--ink); padding: 8px 11px; margin-bottom: 14px;
+  }
+  .class-line .sw { width: 34px; height: 14px; }
+  .class-line b { font-size: 13.5px; letter-spacing: .15em; text-transform: uppercase; }
+
+  .figs { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--ink); }
+  .figs div { padding: 8px 11px 9px; border-right: 1px solid var(--rule-fine);
+              border-bottom: 1px solid var(--rule-fine); }
+  .figs div:nth-child(2n) { border-right: 0; }
+  .figs div:nth-last-child(-n+2) { border-bottom: 0; }
+  .figs b { display: block; font: 600 21px/1.1 "Spectral", Georgia, serif; }
+  .figs small { color: var(--ink-2); font-size: 11px; letter-spacing: .08em;
+                text-transform: uppercase; }
+
+  .note {
+    font-family: "Spectral", Georgia, serif;
+    font-size: 14.5px; font-weight: 400; line-height: 1.6; font-style: italic;
+    color: var(--ink); border-left: 1px solid var(--ink); padding-left: 13px;
+    margin: 14px 0 0;
+  }
+  .note.pending { color: var(--ink-3); }
+
+  h3.sec {
+    font-family: "Archivo Narrow", "Arial Narrow", system-ui, sans-serif;
+    font-size: 11px; font-weight: 600; line-height: 1;
+    letter-spacing: .19em; text-transform: uppercase; color: var(--ink-2);
+    margin: 22px 0 0; padding-bottom: 7px; border-bottom: 1px solid var(--ink);
+  }
+  /* a model id is a literal string; never recase it */
+  .sec .lit { text-transform: none; letter-spacing: .08em; }
+
+  .row { padding: 9px 0; border-bottom: 1px solid var(--rule-fine); font-size: 13.5px; }
+  .row .who { line-height: 1.45; }
+  .row .m {
+    color: var(--ink-2); font-size: 11.5px; letter-spacing: .05em;
+    text-transform: uppercase; margin-top: 3px;
+  }
+  .row .m a { letter-spacing: .05em; }
+  .act { color: var(--t-conflict); font-style: italic;
+         font-family: "Spectral", Georgia, serif; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+  .chip { border: 1px solid var(--rule); padding: 0 6px; font-size: 11px;
+          color: var(--ink-2); letter-spacing: .04em; }
+  .chip:hover { border-color: var(--ink); color: var(--ink); }
+  button.chip { background: transparent; cursor: pointer;
+                font-family: inherit; line-height: 1.5; }
+
+  .conf { display: inline-flex; gap: 2px; vertical-align: 1px; margin-left: 5px; }
+
+  .watch {
+    margin-top: 9px; cursor: pointer; background: transparent;
+    border: 1px solid var(--ink); color: var(--ink);
+    font-family: "Archivo Narrow", "Arial Narrow", system-ui, sans-serif;
+    font-size: 11px; font-weight: 600; line-height: 1;
+    letter-spacing: .17em; text-transform: uppercase; padding: 6px 11px;
+  }
+  .watch[aria-pressed="true"] { background: var(--t-conflict); color: #FFF7FA;
+                                border-color: var(--t-conflict); }
+  .watch:hover { border-color: var(--t-conflict); }
+
+  /* ---- leader line: inset tied to its source rectangle ---- */
+  #leader { position: absolute; inset: 0; width: 100%; height: 100%;
+            z-index: 20; pointer-events: none; }
+  #leader line, #leader rect { stroke: var(--ink); fill: none; }
+
+  /* ---- ink-laying entrance ---- */
+  @keyframes ink { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .block { animation: ink .62s cubic-bezier(.16,1,.3,1) both; }
+  .tblock   { animation-delay: .04s; }
+  .relblock { animation-delay: .16s; }
+  .keyblock { animation-delay: .26s; }
+  #inset.open { animation: rise .34s cubic-bezier(.16,1,.3,1) both; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .block, #inset.open { animation: none; }
+  }
+
+  /* ---- narrow ---- */
+  @media (max-width: 820px) {
+    /* the sheet becomes one scrolling column; nothing is dropped */
+    :root { --frame: 9px; }
+    #field { display: flex; flex-direction: column; overflow-y: auto; }
+    .tblock, .keyblock, #rightcol {
+      position: static; width: auto; flex: none;
+      border-width: 0 0 1px 0; border-style: solid; border-color: var(--ink);
+      background: transparent; animation: none;
+    }
+    #globe { position: relative; inset: auto; order: 2; height: 54vh; flex: none; }
+    .tblock   { order: 1; }
+    .keyblock { order: 3; }
+    #rightcol { order: 4; border-bottom: 0; }
+    .tblock h1 { font-size: 21px; }
+    .keys { grid-template-columns: 1fr; }
+    .keys b { margin-left: auto; }
+    .keys small { display: none; }
+    .actblock { flex: none; }
+    #active { overflow: visible; max-height: none; }
+    #inset { position: fixed; inset: 0; width: 100%; border-left: 0; }
+    #leader { display: none; }
+  }
 </style>
 </head>
 <body>
-<div id="globe"></div>
-<header>
-  <h1>Geo<span>Pulse</span></h1>
-  <p>Live geopolitical activity &middot; GDELT &middot; last 3 days</p>
-</header>
-<div id="status">loading&hellip;</div>
-<div style="position:absolute;top:14px;left:50%;transform:translateX(-50%);z-index:10;width:min(360px,50vw)">
-  <input id="search" type="search" placeholder="Search events &amp; news&hellip; (Enter)"
-    style="width:100%;background:var(--panel);border:1px solid var(--line);color:var(--text);
-    border-radius:18px;padding:7px 14px;font:inherit;outline:none">
-</div>
-<div id="legend">
-  <span><i style="background:var(--stable)"></i>Stable</span>
-  <span><i style="background:var(--elevated)"></i>Elevated</span>
-  <span><i style="background:var(--breaking)"></i>Breaking</span>
-  <span><i style="background:var(--conflict)"></i>Conflict</span>
-  <span><i style="background:var(--grey)"></i>No signal</span>
-</div>
-<div id="panel">
-  <button class="close" onclick="panel.classList.remove('open')">&times;</button>
-  <div id="panel-body"></div>
+<div id="sheet">
+  <div id="field">
+    <div id="globe"></div>
+    <svg id="leader" aria-hidden="true"></svg>
+
+    <div class="block tblock">
+      <h1>GeoPulse</h1>
+      <div class="sub">Geopolitical Activity Chart</div>
+      <div class="rule"></div>
+      <div class="meta-row">
+        <span>Survey <b>GDELT 2.0 &middot; World news</b></span>
+        <span>Window <b>3 d</b></span>
+      </div>
+      <div class="meta-row" style="margin-top:4px">
+        <span>Corrected <b id="dtg">&mdash;</b></span>
+        <span id="status">Reading&hellip;</span>
+      </div>
+      <label class="label" for="search" style="display:block;margin-top:11px">Index</label>
+      <input id="search" type="search" placeholder="Search events and news, then press Enter">
+    </div>
+
+    <div id="rightcol">
+      <div class="block relblock">
+        <span class="label">Reliability of survey</span>
+        <div class="plot" id="zoc"></div>
+      </div>
+      <div class="block actblock">
+        <span class="label">Most active areas</span>
+        <div class="meta-row" style="margin-top:8px">
+          <span>Area</span><span>Violent events</span>
+        </div>
+        <div id="active"></div>
+      </div>
+    </div>
+
+    <div class="block keyblock">
+      <span class="label">Tint key &middot; activity class</span>
+      <div class="keys-head"><span>Class</span><b>Areas</b></div>
+      <div class="keys" id="keys"></div>
+    </div>
+
+    <div id="inset" aria-live="polite"></div>
+  </div>
 </div>
 
 <script>
-const COLORS = {
-  stable:  "#2E7D52", elevated: "#B9931F",
-  breaking: "#D0722A", conflict: "#C0392B", none: "#3a424c",
+const TINT = {
+  none:     getCSS("--t-none"),
+  stable:   getCSS("--t-stable"),
+  elevated: getCSS("--t-elevated"),
+  breaking: getCSS("--t-breaking"),
+  conflict: getCSS("--t-conflict"),
 };
+function getCSS(v) {
+  return getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+}
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+const LEVELS = [
+  ["stable",   "Stable",   "routine activity"],
+  ["elevated", "Elevated", "conflict events rising"],
+  ["breaking", "Breaking", "sustained violent events"],
+  ["conflict", "Conflict", "highest violent share"],
+  ["none",     "No signal", "no events filed"],
+];
+
 const CAMEO_ROOT = {
   "01":"Statement","02":"Appeal","03":"Intent to cooperate","04":"Consult",
   "05":"Diplomatic cooperation","06":"Material cooperation","07":"Aid",
@@ -84,125 +404,368 @@ const CAMEO_ROOT = {
   "16":"Reduce relations","17":"Coerce","18":"Assault","19":"Fight",
   "20":"Mass violence",
 };
-const panel = document.getElementById("panel");
-const panelBody = document.getElementById("panel-body");
-const statusEl = document.getElementById("status");
-let riskByIso = {};
 
+const inset    = document.getElementById("inset");
+const statusEl = document.getElementById("status");
+const leader   = document.getElementById("leader");
+let riskByIso = {};
+let openIso = null, openCentroid = null;
+const NAMES = {};
+const FEATURES = {};
+let surveyable = 0;
+
+/* ---------- authored marks (no glyph icons) ---------- */
+function confMark(level) {
+  const filled = { high: 3, medium: 2, low: 1 }[level] || 0;
+  const boxes = [0, 1, 2].map(i =>
+    `<rect x="${i * 5 + .5}" y="${i === 0 ? 5.5 : i === 1 ? 3.5 : 1.5}"
+       width="3" height="${i === 0 ? 3 : i === 1 ? 5 : 7}"
+       fill="${i < filled ? "var(--ink)" : "none"}"
+       stroke="var(--ink-3)" stroke-width="1"/>`).join("");
+  return `<span class="conf" title="Confidence: ${level} (source count)">
+    <svg width="14" height="10" viewBox="0 0 14 10" aria-label="confidence ${level}"
+      role="img">${boxes}</svg></span>`;
+}
+const CLOSE_MARK = `<svg width="11" height="11" viewBox="0 0 11 11" aria-hidden="true">
+  <path d="M1 1 L10 10 M10 1 L1 10" stroke="currentColor" stroke-width="1.4"/></svg>`;
+
+/* ---------- tint key: the levels, and how many areas sit in each ---------- */
+function renderKeys(risks) {
+  document.getElementById("keys").innerHTML = LEVELS.map(([id, name, gloss]) => {
+    const n = !risks ? null
+      : id === "none" ? Math.max(0, surveyable - risks.length)
+      : risks.filter(r => r.level === id).length;
+    return `<div><i class="sw ${id === "conflict" ? "sw-conflict" : ""}"
+      style="${id === "conflict" ? "" : `background:${TINT[id]}`}"></i>
+      <span>${name}</span><small>${gloss}</small>${
+        n === null ? "" : `<b>${n}</b>`}</div>`;
+  }).join("");
+}
+renderKeys(null);
+
+/* ---------- DTG stamp ---------- */
+function dtg() {
+  const d = new Date();
+  const p = n => String(n).padStart(2, "0");
+  const mon = ["JAN","FEB","MAR","APR","MAY","JUN",
+               "JUL","AUG","SEP","OCT","NOV","DEC"][d.getUTCMonth()];
+  document.getElementById("dtg").textContent =
+    `${p(d.getUTCDate())}${p(d.getUTCHours())}${p(d.getUTCMinutes())}Z ${mon}`;
+}
+dtg(); setInterval(dtg, 30000);
+
+/* ---------- the charted sphere ---------- */
 const globe = Globe()(document.getElementById("globe"))
-  .backgroundColor("#0b0f14")
-  .globeImageUrl("https://unpkg.com/three-globe/example/img/earth-night.jpg")
-  .polygonAltitude(0.008)
-  .polygonStrokeColor(() => "#0b0f14")
-  .polygonCapColor(f => {
-    const r = riskByIso[f.properties.ADM0_A3];
-    return r ? COLORS[r.level] + "cc" : COLORS.none + "99";
-  })
+  .backgroundColor("rgba(0,0,0,0)")
+  .showAtmosphere(false)
+  .showGraticules(true)
+  .polygonAltitude(0.006)
+  .polygonStrokeColor(() => getCSS("--ink"))
+  .polygonSideColor(() => "rgba(22,37,46,0.18)")
+  .polygonCapColor(f => TINT[(riskByIso[f.properties.ADM0_A3] || {}).level || "none"])
   .polygonLabel(f => {
     const r = riskByIso[f.properties.ADM0_A3];
     const name = f.properties.NAME || f.properties.ADM0_A3;
-    return `<b>${name}</b><br>${r ? r.level + " &middot; " + r.total + " events" : "no signal"}`;
+    return `<div style="font:600 12px 'Archivo Narrow','Arial Narrow',system-ui,sans-serif;background:#E9E7DC;
+      color:#16252E;border:1px solid #16252E;padding:4px 8px;letter-spacing:.06em">
+      ${name.toUpperCase()}<br>
+      <span style="font-weight:400;color:#47585F">${
+        r ? r.level + " &middot; " + r.total + " events" : "no signal"
+      }</span></div>`;
   })
-  .onPolygonClick(f => openPanel(f.properties.ADM0_A3, f.properties.NAME));
+  .onPolygonClick(f => openInset(f.properties.ADM0_A3, f.properties.NAME, f));
 
+// flatten the shading: a chart is engraved, not lit
+const gm = globe.globeMaterial();
+gm.color.set("#9DB9C3");
+gm.emissive.set("#6F8C97");
+gm.emissiveIntensity = 0.5;
+gm.shininess = 0;
+
+// fit the sphere to the clear area between the chart's margins
+const globeEl = document.getElementById("globe");
+function sizeGlobe() {
+  globe.width(globeEl.clientWidth).height(globeEl.clientHeight);
+}
+function fit() {
+  sizeGlobe();
+  globe.pointOfView({ altitude: window.innerWidth <= 820 ? 2.35 : 1.85 }, 0);
+}
+fit();
+new ResizeObserver(sizeGlobe).observe(globeEl);
+window.addEventListener("resize", () => { if (!openIso) fit(); });
+
+/* ---------- load + refresh ---------- */
 async function load() {
-  const [countriesRes, riskRes] = await Promise.all([
-    fetch("countries.geojson"),
-    fetch("/api/countries"),
-  ]);
-  const geo = await countriesRes.json();
-  const risks = await riskRes.json();
-  const oldRisk = riskByIso;
-  riskByIso = Object.fromEntries(risks.map(r => [r.iso3, r]));
-  if (Object.keys(oldRisk).length) checkAlerts(oldRisk, riskByIso);
-  globe.polygonsData(geo.features.filter(f => f.properties.ADM0_A3 !== "ATA"));
-  const colored = risks.length;
-  statusEl.textContent = `${colored} countries with activity`;
+  try {
+    const [geoRes, riskRes] = await Promise.all([
+      fetch("countries.geojson"),
+      fetch("/api/countries"),
+    ]);
+    const geo = await geoRes.json();
+    const risks = await riskRes.json();
+    for (const f of geo.features) {
+      NAMES[f.properties.ADM0_A3] = f.properties.NAME || f.properties.ADM0_A3;
+      FEATURES[f.properties.ADM0_A3] = f;
+    }
+    const oldRisk = riskByIso;
+    riskByIso = Object.fromEntries(risks.map(r => [r.iso3, r]));
+    if (Object.keys(oldRisk).length) checkAlerts(oldRisk, riskByIso);
+    const plotted = geo.features.filter(f => f.properties.ADM0_A3 !== "ATA");
+    surveyable = plotted.length;
+    globe.polygonsData(plotted);
+    statusEl.innerHTML = `<b>${risks.length}</b> areas active`;
+    surveyQuality(risks);
+    const deep = location.hash.slice(1).toUpperCase();
+    if (!openIso && /^[A-Z]{3}$/.test(deep) && FEATURES[deep]) {
+      openInset(deep, NAMES[deep], FEATURES[deep]);
+    }
+  } catch {
+    statusEl.textContent = "Survey unavailable";
+  }
 }
 
-async function openPanel(iso3, name) {
-  panel.classList.add("open");
-  panelBody.innerHTML = `<h2>${name}</h2><p style="color:var(--dim)">loading&hellip;</p>`;
+function surveyQuality(risks) {
+  renderKeys(risks);
+
+  const tot = risks.reduce((a, r) => a + r.total, 0);
+  const ms = risks.reduce((a, r) => a + (r.multi_source || 0), 0);
+  const pct = tot ? Math.round(100 * ms / tot) : 0;
+  document.getElementById("zoc").innerHTML = `
+    <div class="plot-bar" role="img"
+      aria-label="${pct}% of filed events confirmed by two or more sources">
+      <span style="width:${pct}%"></span>
+      <i style="left:25%"></i><i style="left:50%"></i><i style="left:75%"></i>
+    </div>
+    <div class="plot-axis"><span>0</span><span>25</span><span>50</span>
+      <span>75</span><span>100%</span></div>
+    <div class="meta-row"><span>Confirmed by 2+ sources</span><b>${pct}%</b></div>
+    <div class="meta-row"><span>Events filed</span><b>${tot.toLocaleString()}</b></div>
+    <div class="meta-row"><span>Areas reporting</span><b>${risks.length}</b></div>`;
+
+  const order = { conflict: 3, breaking: 2, elevated: 1, stable: 0 };
+  document.getElementById("active").innerHTML = risks
+    .slice()
+    .sort((a, b) => (order[b.level] - order[a.level]) || (b.violent - a.violent)
+                    || (b.total - a.total))
+    .slice(0, 24)
+    .map(r => `<button class="act-row" onclick="openInset('${r.iso3}',
+        ${JSON.stringify(NAMES[r.iso3] || r.iso3)}, null)">
+        <i class="sw" style="background:${TINT[r.level]}"></i>
+        <span class="nm">${NAMES[r.iso3] || r.iso3}</span>
+        <span class="n">${r.violent}</span></button>`).join("");
+}
+
+/* ---------- the inset ---------- */
+function insetHead(title, sub) {
+  return `<div class="inset-head">
+    <h2>${title}<span class="desig">${sub}</span></h2>
+    <button class="close" onclick="closeInset()" aria-label="Close inset">${CLOSE_MARK}</button>
+  </div>`;
+}
+
+function closeInset() {
+  inset.classList.remove("open");
+  document.getElementById("rightcol").hidden = false;
+  openIso = null; openCentroid = null;
+  clearLeader();
+  if (location.hash) history.replaceState(null, "", location.pathname);
+  fit();
+}
+window.closeInset = closeInset;
+
+async function openInset(iso3, name, feature) {
+  openIso = iso3;
+  const f = feature || FEATURES[iso3];
+  openCentroid = f ? centroid(f) : null;
+  if (openCentroid) globe.pointOfView(
+    { lat: openCentroid[0], lng: openCentroid[1],
+      altitude: window.innerWidth <= 820 ? 2.2 : 1.7 }, 700);
+
+  if (location.hash.slice(1) !== iso3) history.replaceState(null, "", "#" + iso3);
+  document.getElementById("rightcol").hidden = true;
+  inset.classList.add("open");
+  inset.scrollTop = 0;
+  inset.innerHTML = insetHead(name, "Inset A") +
+    `<div class="pad"><p class="note pending">Reading survey&hellip;</p></div>`;
+
   const res = await fetch(`/api/country/${iso3}`);
   if (!res.ok) {
-    panelBody.innerHTML = `<h2>${name}</h2><p style="color:var(--dim)">No recent events.</p>`;
+    inset.innerHTML = insetHead(name, "Inset A") +
+      `<div class="pad"><p class="note pending">No events filed for this area
+       in the last 3 days. The area is surveyed but blank.</p></div>`;
     return;
   }
   const d = await res.json();
   const b = d.breakdown;
+  const pct = b.total ? Math.round(100 * b.multi_source / b.total) : 0;
   const watched = getWatchlist().includes(iso3);
-  panelBody.innerHTML = `
-    <h2>${name}
-      <button onclick="toggleWatch('${iso3}', '${name.replace(/'/g, "")}')"
-        style="font:600 11px system-ui;letter-spacing:.06em;cursor:pointer;
-        background:${watched ? "var(--conflict)" : "transparent"};
-        color:${watched ? "#fff" : "var(--dim)"};border:1px solid var(--line);
-        border-radius:12px;padding:3px 10px;vertical-align:middle">
-        ${watched ? "WATCHING" : "WATCH"}</button></h2>
-    <span class="lvl" style="background:${COLORS[d.level]}">${d.level}</span>
-    <div id="ai-summary" style="background:var(--bg);border:1px solid var(--line);
-      border-radius:6px;padding:10px 12px;font-size:13px;color:var(--dim)">
-      Generating AI summary&hellip; (local model, ~30s on first click)</div>
-    <div id="related" style="margin:10px 0"></div>
-    <div class="stats">
-      <div><b>${b.total}</b><small>events / ${d.window_days}d</small></div>
-      <div><b>${b.quad4}</b><small>material conflict</small></div>
-      <div><b>${b.violent}</b><small>violent (18/19/20)</small></div>
-      <div><b>${b.total ? Math.round(100 * b.multi_source / b.total) : 0}%</b>
-        <small>multi-source</small></div>
-    </div>
-    <div id="relations"></div>
-    ${d.headlines && d.headlines.length ? `
-    <h3 style="font-size:13px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em">
-      Latest headlines</h3>
-    ${d.headlines.map(h => `
-      <div class="ev">
-        <div class="who"><a href="${h.url}" target="_blank" rel="noopener">${h.title}</a></div>
-        <div class="meta">${h.source}${h.published ? " &middot; " + h.published.slice(0, 16) : ""}</div>
-        ${h.entities && h.entities.length ? `<div class="meta">${
-          h.entities.slice(0, 6).map(e => `<span style="border:1px solid var(--line);
-            border-radius:10px;padding:0 7px;margin-right:4px">${e.text}</span>`).join("")
-        }</div>` : ""}
-      </div>`).join("")}` : ""}
-    <h3 style="font-size:13px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em">
-      Top events</h3>
-    ${d.events.map(e => `
-      <div class="ev">
-        <div class="who">${e.actor1 || "?"} &rarr; ${e.actor2 || "?"}
-          &middot; ${CAMEO_ROOT[e.cameo_root] || e.cameo_root}
-          <span title="confidence: ${e.confidence} (source count)" style="color:${
-            {high: "var(--stable)", medium: "var(--elevated)", low: "var(--dim)"}[e.confidence]
-          };font-size:11px">&#9679; ${e.confidence}</span></div>
-        <div class="meta">${e.date} &middot; ${e.place || ""} &middot;
-          ${e.articles} articles
-          ${e.url ? `&middot; <a href="${e.url}" target="_blank" rel="noopener">source</a>` : ""}
-        </div>
-      </div>`).join("")}
-  `;
+  const levelName = (LEVELS.find(l => l[0] === d.level) || [, d.level])[1];
+
+  inset.innerHTML = insetHead(`${name} <span class="iso">${iso3}</span>`, "Inset A") + `
+    <div class="pad">
+      <div class="class-line">
+        <i class="sw ${d.level === "conflict" ? "sw-conflict" : ""}"
+           style="${d.level === "conflict" ? "" : `background:${TINT[d.level]}`}"></i>
+        <b>${levelName}</b>
+        <span style="margin-left:auto;color:var(--ink-2);font-size:11.5px;
+          letter-spacing:.08em;text-transform:uppercase">${d.window_days}-day window</span>
+      </div>
+
+      <button class="watch" aria-pressed="${watched}"
+        onclick="toggleWatch('${iso3}', ${JSON.stringify(name)})">
+        ${watched ? "Watching this area" : "Watch this area"}</button>
+
+      <h3 class="sec">Counts</h3>
+      <div class="figs" style="margin-top:10px">
+        <div><b>${b.total}</b><small>events filed</small></div>
+        <div><b>${b.quad4}</b><small>material conflict</small></div>
+        <div><b>${b.violent}</b><small>assault, fight, mass violence</small></div>
+        <div><b>${pct}%</b><small>confirmed by 2+ sources</small></div>
+      </div>
+
+      <h3 class="sec">Survey note &middot; generated</h3>
+      <p class="note pending" id="ai-summary">Generating from the events and
+        headlines above. On a cold local model this takes about 30 seconds.</p>
+
+      <div id="related"></div>
+      <div id="relations"></div>
+
+      ${d.headlines && d.headlines.length ? `
+        <h3 class="sec">Headlines</h3>
+        ${d.headlines.map(h => `
+          <div class="row">
+            <div class="who"><a href="${h.url}" target="_blank" rel="noopener">${h.title}</a></div>
+            <div class="m">${h.source}${h.published ? " &middot; " + h.published.slice(0, 16) : ""}</div>
+            ${h.entities && h.entities.length ? `<div class="chips">${
+              h.entities.slice(0, 6).map(e => `<span class="chip">${e.text}</span>`).join("")
+            }</div>` : ""}
+          </div>`).join("")}` : ""}
+
+      <h3 class="sec">Events</h3>
+      ${d.events.map(e => `
+        <div class="row">
+          <div class="who">${e.actor1 || "Unattributed"} &rarr; ${e.actor2 || "Unattributed"}
+            &middot; ${CAMEO_ROOT[e.cameo_root] || e.cameo_root}${confMark(e.confidence)}</div>
+          <div class="m">${e.date}${e.place ? " &middot; " + e.place : ""} &middot;
+            ${e.articles} articles${e.url
+              ? ` &middot; <a href="${e.url}" target="_blank" rel="noopener">source</a>` : ""}</div>
+        </div>`).join("")}
+    </div>`;
+
   loadSummary(iso3);
   loadRelated(iso3);
   loadRelations(iso3);
 }
+window.openInset = openInset;
 
+/* ---------- leader line: inset tied to its source rectangle ---------- */
+function centroid(f) {
+  const g = f.geometry;
+  const rings = g.type === "Polygon" ? [g.coordinates[0]]
+              : g.coordinates.map(p => p[0]);
+  let best = rings[0], bestLen = 0;
+  for (const r of rings) if (r.length > bestLen) { bestLen = r.length; best = r; }
+  let x0 = 180, x1 = -180, y0 = 90, y1 = -90;
+  for (const [lng, lat] of best) {
+    if (lng < x0) x0 = lng; if (lng > x1) x1 = lng;
+    if (lat < y0) y0 = lat; if (lat > y1) y1 = lat;
+  }
+  return [(y0 + y1) / 2, (x0 + x1) / 2];
+}
+
+function svgEl(tag, attrs) {
+  const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  e.setAttribute("stroke", "#16252E");
+  e.setAttribute("stroke-width", "1");
+  e.setAttribute("fill", "none");
+  return e;
+}
+function clearLeader() { leader.replaceChildren(); }
+
+function drawLeader() {
+  if (!openCentroid || !inset.classList.contains("open")
+      || window.innerWidth <= 820) { clearLeader(); return; }
+  if (typeof globe.getScreenCoords !== "function") return;
+  const c = globe.getScreenCoords(openCentroid[0], openCentroid[1], 0.006);
+  if (!c || !visible(openCentroid)) { clearLeader(); return; }
+  const fr = document.getElementById("field").getBoundingClientRect();
+  const gr = globeEl.getBoundingClientRect();
+  const x = c.x + (gr.left - fr.left), y = c.y + (gr.top - fr.top);
+  const tx = inset.getBoundingClientRect().left - fr.left, ty = 58;
+  if (x > tx - 24) { clearLeader(); return; }
+  leader.replaceChildren(
+    svgEl("rect", { x: x - 9, y: y - 9, width: 18, height: 18 }),
+    svgEl("line", { x1: x + 9, y1: y, x2: tx - 18, y2: ty }),
+    svgEl("line", { x1: tx - 18, y1: ty, x2: tx, y2: ty }));
+}
+
+// visible when the point lies on the hemisphere the camera is looking at
+function visible([lat, lng]) {
+  const pov = globe.pointOfView();
+  const r = Math.PI / 180;
+  const cos = Math.sin(pov.lat * r) * Math.sin(lat * r)
+            + Math.cos(pov.lat * r) * Math.cos(lat * r)
+              * Math.cos((lng - pov.lng) * r);
+  return cos > 0.25;
+}
+(function tick() { drawLeader(); requestAnimationFrame(tick); })();
+
+/* ---------- supplementary blocks ---------- */
 async function loadRelations(iso3) {
   const el = document.getElementById("relations");
+  if (!el) return;
   try {
     const rows = await (await fetch(`/api/country/${iso3}/relations`)).json();
     if (!rows.length) return;
-    el.innerHTML = `<h3 style="font-size:13px;color:var(--dim);
-      text-transform:uppercase;letter-spacing:.08em">Who did what</h3>` +
-      rows.map(r => `
-        <div class="ev">
-          <div class="who"><b>${r.actor}</b>
-            <span style="color:var(--breaking)">${r.action}</span>
-            <b>${r.target}</b>${r.instrument ? ` <span style="color:var(--dim)">
-              using ${r.instrument}</span>` : ""}</div>
-          <div class="meta"><a href="${r.url}" target="_blank" rel="noopener">source</a></div>
-        </div>`).join("");
-  } catch { /* extractor hasn't run yet */ }
+    el.innerHTML = `<h3 class="sec">Reported actions</h3>` + rows.map(r => `
+      <div class="row">
+        <div class="who"><b>${r.actor}</b> <span class="act">${r.action}</span>
+          <b>${r.target}</b>${r.instrument
+            ? ` <span style="color:var(--ink-2)">using ${r.instrument}</span>` : ""}</div>
+        <div class="m"><a href="${r.url}" target="_blank" rel="noopener">source</a></div>
+      </div>`).join("");
+  } catch { /* extractor has not run */ }
 }
 
-/* ---- watchlist + browser alerts ---- */
+async function loadRelated(iso3) {
+  const el = document.getElementById("related");
+  if (!el) return;
+  try {
+    const rows = await (await fetch(`/api/country/${iso3}/related`)).json();
+    if (!rows.length) return;
+    el.innerHTML = `<h3 class="sec">Adjoining areas &middot; shared actors</h3>
+      <div class="chips" style="margin-top:9px">` + rows.map(r =>
+        `<button class="chip" title="Linked via ${(r.via || []).join(", ")}"
+          onclick="openInset('${r.iso3}','${r.iso3}',null)">${r.iso3} &middot; ${r.links}</button>`
+      ).join("") + `</div>`;
+  } catch { /* graph offline */ }
+}
+
+async function loadSummary(iso3) {
+  const el = document.getElementById("ai-summary");
+  if (!el) return;
+  try {
+    const res = await fetch(`/api/country/${iso3}/summary`);
+    if (!res.ok) { el.textContent = "Not enough filed data to generate a note."; return; }
+    const d = await res.json();
+    el.classList.remove("pending");
+    el.textContent = d.summary;
+    if (d.model) {
+      const h = el.previousElementSibling;
+      if (h && h.classList.contains("sec")) {
+        h.innerHTML = "Survey note · generated by "
+          + `<span class="lit">${esc(d.model)}</span>`;
+      }
+    }
+  } catch {
+    el.textContent = "No note could be generated. The counts, headlines and "
+      + "events on this sheet stand on their own.";
+  }
+}
+
+/* ---------- watchlist + alerts ---------- */
 function getWatchlist() {
   try { return JSON.parse(localStorage.watchlist || "[]"); } catch { return []; }
 }
@@ -214,71 +777,57 @@ function toggleWatch(iso3, name) {
     if (Notification.permission === "default") Notification.requestPermission();
   }
   localStorage.watchlist = JSON.stringify(w);
-  openPanel(iso3, name);  // re-render the button
+  const btn = inset.querySelector(".watch");
+  if (btn) {
+    const on = w.includes(iso3);
+    btn.setAttribute("aria-pressed", on);
+    btn.textContent = on ? "Watching this area" : "Watch this area";
+  }
 }
+window.toggleWatch = toggleWatch;
+
 function checkAlerts(oldRisk, newRisk) {
   for (const iso3 of getWatchlist()) {
     const was = (oldRisk[iso3] || {}).level || "stable";
     const now = (newRisk[iso3] || {}).level || "stable";
     if (was !== now && Notification.permission === "granted") {
-      new Notification(`GeoPulse: ${iso3}`, {
-        body: `Risk level changed: ${was} → ${now}`,
-      });
+      new Notification(`GeoPulse: ${iso3}`, { body: `Activity class changed: ${was} → ${now}` });
     }
   }
 }
 
-/* ---- search ---- */
+/* ---------- index search ---------- */
 document.getElementById("search").addEventListener("keydown", async ev => {
   if (ev.key !== "Enter") return;
   const q = ev.target.value.trim();
   if (!q) return;
-  panel.classList.add("open");
-  panelBody.innerHTML = `<h2>Search: ${q}</h2><p style="color:var(--dim)">searching&hellip;</p>`;
+  openIso = null; openCentroid = null; clearLeader();
+  document.getElementById("rightcol").hidden = true;
+  inset.classList.add("open");
+  inset.scrollTop = 0;
+  inset.innerHTML = insetHead(q, "Index search") +
+    `<div class="pad"><p class="note pending">Searching the survey&hellip;</p></div>`;
   const d = await (await fetch(`/api/search?q=${encodeURIComponent(q)}`)).json();
-  panelBody.innerHTML = `<h2>Search: ${q}</h2>
-    ${d.articles.length ? `<h3 style="font-size:13px;color:var(--dim);
-      text-transform:uppercase;letter-spacing:.08em">News</h3>` +
-      d.articles.map(a => `<div class="ev">
+  inset.innerHTML = insetHead(q, "Index search") + `<div class="pad">
+    ${d.articles.length ? `<h3 class="sec">News</h3>` + d.articles.map(a => `
+      <div class="row">
         <div class="who"><a href="${a.url}" target="_blank" rel="noopener">${a.title}</a></div>
-        <div class="meta">${a.source} &middot; ${(a.countries || []).join(", ")}</div>
+        <div class="m">${a.source}${(a.countries || []).length
+          ? " &middot; " + a.countries.join(", ") : ""}</div>
       </div>`).join("") : ""}
-    ${d.events.length ? `<h3 style="font-size:13px;color:var(--dim);
-      text-transform:uppercase;letter-spacing:.08em">Events</h3>` +
-      d.events.map(e => `<div class="ev">
-        <div class="who">${e.actor1 || "?"} &rarr; ${e.actor2 || "?"}</div>
-        <div class="meta">${e.date} &middot; ${e.iso3} &middot; ${e.place || ""}
-          ${e.url ? `&middot; <a href="${e.url}" target="_blank" rel="noopener">source</a>` : ""}</div>
+    ${d.events.length ? `<h3 class="sec">Events</h3>` + d.events.map(e => `
+      <div class="row">
+        <div class="who">${e.actor1 || "Unattributed"} &rarr; ${e.actor2 || "Unattributed"}</div>
+        <div class="m">${e.date} &middot; ${e.iso3}${e.place ? " &middot; " + e.place : ""}
+          ${e.url ? ` &middot; <a href="${e.url}" target="_blank" rel="noopener">source</a>` : ""}</div>
       </div>`).join("") : ""}
-    ${!d.articles.length && !d.events.length ? `<p style="color:var(--dim)">No results.</p>` : ""}`;
+    ${!d.articles.length && !d.events.length
+      ? `<p class="note pending">Nothing in the index matches that.</p>` : ""}
+  </div>`;
 });
 
-async function loadSummary(iso3) {
-  const el = document.getElementById("ai-summary");
-  try {
-    const res = await fetch(`/api/country/${iso3}/summary`);
-    if (!res.ok) { el.textContent = "No summary available."; return; }
-    const d = await res.json();
-    el.style.color = "var(--text)";
-    el.textContent = d.summary;
-  } catch { el.textContent = "Summary engine offline (is Ollama running?)"; }
-}
-
-async function loadRelated(iso3) {
-  const el = document.getElementById("related");
-  try {
-    const rows = await (await fetch(`/api/country/${iso3}/related`)).json();
-    if (!rows.length) return;
-    el.innerHTML = `<span style="color:var(--dim);font-size:11px;
-      text-transform:uppercase;letter-spacing:.08em">Related:</span> ` +
-      rows.map(r => `<span title="via ${(r.via || []).join(", ")}"
-        style="border:1px solid var(--line);border-radius:10px;padding:1px 8px;
-        margin-right:4px;font-size:12px">${r.iso3} (${r.links})</span>`).join("");
-  } catch { /* graph offline — skip quietly */ }
-}
-
 load();
-setInterval(load, 60000);  // live refresh: recolor the globe every minute
+setInterval(load, 60000);
 </script>
 </body>
 </html>

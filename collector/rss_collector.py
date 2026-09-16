@@ -14,7 +14,7 @@ from psycopg.types.json import Jsonb
 
 from ner import extract
 
-DB_URL = "postgresql://geopulse:geopulse@localhost:5432/geopulse"
+DB_URL = "postgresql://geopulse:geopulse@localhost:6543/geopulse"
 
 FEEDS = {
     "BBC World": "https://feeds.bbci.co.uk/news/world/rss.xml",

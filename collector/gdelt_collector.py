@@ -25,7 +25,7 @@ import requests
 from fips_iso import FIPS_TO_ISO3
 
 GDELT_BASE = "http://data.gdeltproject.org/gdeltv2"
-DB_URL = "postgresql://geopulse:geopulse@localhost:5432/geopulse"
+DB_URL = "postgresql://geopulse:geopulse@localhost:6543/geopulse"
 
 # Column indexes in GDELT 2.0 export CSV (61 tab-separated columns, no header)
 COL_ID, COL_DATE = 0, 1
