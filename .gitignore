@@ -4,5 +4,3 @@ __pycache__/
 .venv/
 cloudflared.exe
 tunnel.log
-.impeccable/
-CLAUDE.md
