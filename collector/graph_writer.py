@@ -12,11 +12,14 @@ Usage:  python graph_writer.py     (re-runs are idempotent via MERGE)
 """
 
 import sys
+from pathlib import Path
 
 import psycopg
 from neo4j import GraphDatabase
 
-PG_URL = "postgresql://geopulse:geopulse@localhost:6543/geopulse"
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+from config import DB_URL
+
 MEMGRAPH_URL = "bolt://localhost:7687"
 WINDOW_DAYS = 3
 
@@ -49,7 +52,7 @@ def clean_actor(name: str | None) -> str | None:
 
 
 def main() -> None:
-    with psycopg.connect(PG_URL) as pg, pg.cursor() as cur:
+    with psycopg.connect(DB_URL) as pg, pg.cursor() as cur:
         cur.execute(
             """
             SELECT id, actor1, actor2, cameo_root, quad_class,
@@ -91,7 +94,7 @@ def main() -> None:
         ).data()
     driver.close()
 
-    with psycopg.connect(PG_URL) as pg:
+    with psycopg.connect(DB_URL) as pg:
         pg.execute("TRUNCATE related_countries")
         with pg.cursor() as cur:
             cur.executemany(

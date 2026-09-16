@@ -17,15 +17,17 @@ import csv
 import io
 import sys
 import zipfile
+from pathlib import Path
 from datetime import datetime, timedelta, timezone
 
 import psycopg
 import requests
 
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+from config import DB_URL
 from fips_iso import FIPS_TO_ISO3
 
 GDELT_BASE = "http://data.gdeltproject.org/gdeltv2"
-DB_URL = "postgresql://geopulse:geopulse@localhost:6543/geopulse"
 
 # Column indexes in GDELT 2.0 export CSV (61 tab-separated columns, no header)
 COL_ID, COL_DATE = 0, 1

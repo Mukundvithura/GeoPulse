@@ -9,6 +9,7 @@ conflict-class events in the last 3 days, weighted, with the numbers
 returned so the UI can always show *why* a country has its color.
 """
 
+import sys
 from pathlib import Path
 
 import psycopg
@@ -17,7 +18,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-DB_URL = "postgresql://geopulse:geopulse@localhost:6543/geopulse"
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+from config import DB_URL
+
 MEMGRAPH_URL = "bolt://localhost:7687"
 OLLAMA_URL = "http://localhost:11434/api/generate"
 OLLAMA_MODEL = "llama3.2:3b"

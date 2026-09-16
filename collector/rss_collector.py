@@ -6,15 +6,16 @@ Safe to re-run any time; duplicate URLs are skipped.
 
 import re
 import sys
+from pathlib import Path
 from datetime import datetime, timezone
 
 import feedparser
 import psycopg
 from psycopg.types.json import Jsonb
 
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+from config import DB_URL
 from ner import extract
-
-DB_URL = "postgresql://geopulse:geopulse@localhost:6543/geopulse"
 
 FEEDS = {
     "BBC World": "https://feeds.bbci.co.uk/news/world/rss.xml",

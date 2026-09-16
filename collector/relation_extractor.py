@@ -10,11 +10,14 @@ Usage:  python relation_extractor.py [--limit 40]
 import argparse
 import json
 import sys
+from pathlib import Path
 
 import psycopg
 import requests
 
-DB_URL = "postgresql://geopulse:geopulse@localhost:6543/geopulse"
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+from config import DB_URL
+
 OLLAMA_URL = "http://localhost:11434/api/generate"
 MODEL = "llama3.2:3b"
 
