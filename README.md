@@ -44,7 +44,9 @@ Open http://localhost:8000 — click any colored country.
 ## Phase 3 (done)
 
 - **Knowledge graph**: Memgraph (Docker) — actors/events/countries, related-countries via shared actors
-- **AI summaries**: local Ollama (`llama3.2:3b`), grounded prompt from real events + headlines, cached 6h
+- **AI summaries**: removed from the interface. Generated prose over thin,
+  single-sourced event rows read as a confident account of a country without
+  traceable evidence behind each claim.
 - **Live globe**: recolors every 60s
 
 ## Phase 4 (done)

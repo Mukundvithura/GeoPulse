@@ -25,9 +25,11 @@ The risk score is transparent by design, not a black box. Levels come from
 published thresholds on conflict-class CAMEO event counts plus the *share* of
 violent events (so high-media-volume countries like the USA do not sit
 permanently red), and the raw counts are returned to the UI so the interface can
-always show why a country has its color. LLM summaries are grounded: the prompt
-is constructed only from the real events and headlines on hand, and is
-instructed to state nothing absent from that data. Per-event confidence
+always show why a country has its color. Generated prose was removed from the
+interface: a model summary of thin, single-sourced event rows read as a
+confident account of a country and could not be traced claim-by-claim, which
+principle 1 requires. The interface states counts, events and headlines only.
+Per-event confidence
 (high/medium/low) is derived from source count, and per-country "% multi-source"
 is exposed.
 
@@ -38,8 +40,8 @@ is exposed.
   weapon / military unit); country tagging maps entities and text mentions to ISO3.
 - Knowledge graph: Memgraph holds actors/events/countries; related-countries via
   shared actors are precomputed into Postgres so the read path does not need it.
-- Summaries and relation extraction: local Ollama (`llama3.2:3b`), summaries
-  cached 6 hours.
+- Relation extraction: local Ollama (`llama3.2:3b`). The `/summary` endpoint
+  and `summaries` table still exist but nothing in the interface calls them.
 - Sharing today: `cloudflared tunnel --url http://localhost:8000` gives a public
   URL while the laptop runs.
 - Rolling window is 3 days everywhere (`WINDOW_DAYS`).
@@ -50,7 +52,7 @@ Shipped: country choropleth globe with click-to-open country panel; risk levels
 (stable / elevated / breaking / conflict / no signal); score breakdown and up to
 25 recent events with source links; country headlines with entities; related
 countries via shared actors; actor→action→target relations from headlines;
-grounded AI situation summary; full-text search over news plus actor/place
+full-text search over news plus actor/place
 search over events; per-country Watch with a browser notification when risk
 level changes; globe recolors every 60s.
 
@@ -68,8 +70,7 @@ either answer.
 ## Evidence on Hand
 
 All displayed data is real and live: GDELT event rows, RSS headlines with source
-names and URLs, and model-generated summaries labeled with the model that wrote
-them. There are no users, customers, testimonials, press mentions, benchmarks,
+names and URLs. No generated prose is displayed. There are no users, customers, testimonials, press mentions, benchmarks,
 or usage numbers — none exist, and none may be invented. There is no logo,
 wordmark, or brand asset file; the current identity is the plain "GeoPulse"
 text lockup in `web/index.html`.
