@@ -271,7 +271,7 @@ The chart's statement about itself, upper-right. A 17px bar with a 1px ink borde
 ### Country inset (signature)
 A full-height ruled panel on the right (`min(432px, 94vw)`, full-screen below 820px) with its own sticky title block: area name in Headline, ISO3 trailing, "Inset A" as a Label designation, close square at the top-right. Body order is fixed: class line (swatch + class name + window), Watch, Counts figure grid (2×2, ink-bordered, rule-fine interior cells), generated survey note, adjoining areas, reported actions, headlines, events. It is tied to the globe by a **leader line** drawn every frame: an 18×18 source rectangle at the country's centroid, a diagonal, and a short horizontal into the panel edge — the way a chart ties an inset to its source rectangle. The leader clears itself when the centroid rotates past the visible hemisphere (`cos > 0.25`), when it would collide with the panel edge, and below 820px.
 
-**The inset carries no scale bar, by decision.** The direction contract originally promised one; it was struck at the finish review. A country inset hung off a 3D globe states no linear relation, and the only candidate — a time axis across the 3-day window — would have to be drawn from the 25 events the endpoint returns, fabricating a distribution from a truncated set and breaking product principle 4 (fabricate nothing). Do not re-raise this as a gap. If a ruler is ever genuinely wanted there, the only honest one is this country's violent share measured against the surveyed maximum, drawn from the complete `/api/countries` rows — optional, and not owed.
+**The inset carries no scale bar, by decision.** A country inset hung off a 3D globe states no linear relation, and the only candidate — a time axis across the 3-day window — would have to be drawn from the 25 events the endpoint returns, fabricating a distribution from a truncated set and breaking product principle 4 (fabricate nothing). If a ruler is ever genuinely wanted there, the only honest one is this country's violent share measured against the surveyed maximum, drawn from the complete `/api/countries` rows — optional, and not owed.
 
 ## Do's and Don'ts
 
@@ -293,11 +293,3 @@ A full-height ruled panel on the right (`min(432px, 94vw)`, full-screen below 82
 - **Don't** use an icon font, emoji, or a third-party glyph set.
 - **Don't** recase or track out a machine identifier that lands inside a label.
 - **Don't** draw a ruler, axis, or scale that the data cannot honestly support, and never draw a distribution from a truncated response.
-
-<!--
-Sanctioned findings — recorded so a later audit does not re-raise them as slop.
-All three were reviewed and ruled justified at the finish review:
-  * cream-palette — the buff chart-paper ground is the world's material, not a default.
-  * repeating-stripes-gradient — the 45° magenta hatch is the chart's danger-area convention.
-  * codex-grid-background — a misread of the graduated tick border that frames the sheet.
--->
