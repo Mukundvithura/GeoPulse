@@ -384,9 +384,31 @@ function getCSS(v) {
   return getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 }
 function esc(s) {
-  return String(s).replace(/[&<>"]/g, c =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
+/* An href is an attribute, not text: entity-escaping alone still lets
+   javascript: and data: through. Anything that is not http(s) is refused. */
+function safeUrl(u) {
+  if (!u) return "";
+  try {
+    const p = new URL(String(u), location.href);
+    return (p.protocol === "http:" || p.protocol === "https:") ? p.href : "";
+  } catch { return ""; }
+}
+/* A source link, or — when the URL cannot be trusted — the label as plain
+   text. A refused URL reads as absent rather than as a link to nowhere. */
+function sourceLink(u, label) {
+  const s = safeUrl(u);
+  return s ? `<a href="${esc(s)}" target="_blank" rel="noopener">${esc(label)}</a>`
+           : esc(label);
+}
+/* ISO3 is the only server value that reaches a JS string inside an inline
+   handler, so it is validated rather than escaped: three letters or nothing. */
+function isoAttr(iso3) {
+  return /^[A-Za-z]{3}$/.test(String(iso3)) ? String(iso3).toUpperCase() : "";
+}
+function tint(level) { return TINT[level] || TINT.none; }
 
 const LEVELS = [
   ["stable",   "Stable",   "routine activity"],
@@ -422,8 +444,8 @@ function confMark(level) {
        width="3" height="${i === 0 ? 3 : i === 1 ? 5 : 7}"
        fill="${i < filled ? "var(--ink)" : "none"}"
        stroke="var(--ink-3)" stroke-width="1"/>`).join("");
-  return `<span class="conf" title="Confidence: ${level} (source count)">
-    <svg width="14" height="10" viewBox="0 0 14 10" aria-label="confidence ${level}"
+  return `<span class="conf" title="Confidence: ${esc(level)} (source count)">
+    <svg width="14" height="10" viewBox="0 0 14 10" aria-label="confidence ${esc(level)}"
       role="img">${boxes}</svg></span>`;
 }
 const CLOSE_MARK = `<svg width="11" height="11" viewBox="0 0 11 11" aria-hidden="true">
@@ -462,15 +484,15 @@ const globe = Globe()(document.getElementById("globe"))
   .polygonAltitude(0.006)
   .polygonStrokeColor(() => getCSS("--ink"))
   .polygonSideColor(() => "rgba(22,37,46,0.18)")
-  .polygonCapColor(f => TINT[(riskByIso[f.properties.ADM0_A3] || {}).level || "none"])
+  .polygonCapColor(f => tint((riskByIso[f.properties.ADM0_A3] || {}).level))
   .polygonLabel(f => {
     const r = riskByIso[f.properties.ADM0_A3];
     const name = f.properties.NAME || f.properties.ADM0_A3;
     return `<div style="font:600 12px 'Archivo Narrow','Arial Narrow',system-ui,sans-serif;background:#E9E7DC;
       color:#16252E;border:1px solid #16252E;padding:4px 8px;letter-spacing:.06em">
-      ${name.toUpperCase()}<br>
+      ${esc(name.toUpperCase())}<br>
       <span style="font-weight:400;color:#47585F">${
-        r ? r.level + " &middot; " + r.total + " events" : "no signal"
+        r ? esc(r.level) + " &middot; " + esc(r.total) + " events" : "no signal"
       }</span></div>`;
   })
   .onPolygonClick(f => openInset(f.properties.ADM0_A3, f.properties.NAME, f));
@@ -549,17 +571,17 @@ function surveyQuality(risks) {
     .sort((a, b) => (order[b.level] - order[a.level]) || (b.violent - a.violent)
                     || (b.total - a.total))
     .slice(0, 24)
-    .map(r => `<button class="act-row" onclick="openInset('${r.iso3}',
-        ${JSON.stringify(NAMES[r.iso3] || r.iso3)}, null)">
-        <i class="sw" style="background:${TINT[r.level]}"></i>
-        <span class="nm">${NAMES[r.iso3] || r.iso3}</span>
-        <span class="n">${r.violent}</span></button>`).join("");
+    .map(r => `<button class="act-row" onclick="openInset('${isoAttr(r.iso3)}')">
+        <i class="sw" style="background:${tint(r.level)}"></i>
+        <span class="nm">${esc(NAMES[r.iso3] || r.iso3)}</span>
+        <span class="n">${esc(r.violent)}</span></button>`).join("");
 }
 
 /* ---------- the inset ---------- */
-function insetHead(title, sub) {
+function insetHead(title, sub, iso3) {
   return `<div class="inset-head">
-    <h2>${title}<span class="desig">${sub}</span></h2>
+    <h2>${esc(title)}${iso3 ? ` <span class="iso">${esc(iso3)}</span>` : ""
+      }<span class="desig">${esc(sub)}</span></h2>
     <button class="close" onclick="closeInset()" aria-label="Close inset">${CLOSE_MARK}</button>
   </div>`;
 }
@@ -575,6 +597,7 @@ function closeInset() {
 window.closeInset = closeInset;
 
 async function openInset(iso3, name, feature) {
+  name = name || NAMES[iso3] || iso3;
   openIso = iso3;
   const f = feature || FEATURES[iso3];
   openCentroid = f ? centroid(f) : null;
@@ -602,26 +625,26 @@ async function openInset(iso3, name, feature) {
   const watched = getWatchlist().includes(iso3);
   const levelName = (LEVELS.find(l => l[0] === d.level) || [, d.level])[1];
 
-  inset.innerHTML = insetHead(`${name} <span class="iso">${iso3}</span>`, "Inset A") + `
+  inset.innerHTML = insetHead(name, "Inset A", iso3) + `
     <div class="pad">
       <div class="class-line">
         <i class="sw ${d.level === "conflict" ? "sw-conflict" : ""}"
-           style="${d.level === "conflict" ? "" : `background:${TINT[d.level]}`}"></i>
-        <b>${levelName}</b>
+           style="${d.level === "conflict" ? "" : `background:${tint(d.level)}`}"></i>
+        <b>${esc(levelName)}</b>
         <span style="margin-left:auto;color:var(--ink-2);font-size:11.5px;
-          letter-spacing:.08em;text-transform:uppercase">${d.window_days}-day window</span>
+          letter-spacing:.08em;text-transform:uppercase">${esc(d.window_days)}-day window</span>
       </div>
 
       <button class="watch" aria-pressed="${watched}"
-        onclick="toggleWatch('${iso3}', ${JSON.stringify(name)})">
+        onclick="toggleWatch('${isoAttr(iso3)}')">
         ${watched ? "Watching this area" : "Watch this area"}</button>
 
       <h3 class="sec">Counts</h3>
       <div class="figs" style="margin-top:10px">
-        <div><b>${b.total}</b><small>events filed</small></div>
-        <div><b>${b.quad4}</b><small>material conflict</small></div>
-        <div><b>${b.violent}</b><small>assault, fight, mass violence</small></div>
-        <div><b>${pct}%</b><small>confirmed by 2+ sources</small></div>
+        <div><b>${esc(b.total)}</b><small>events filed</small></div>
+        <div><b>${esc(b.quad4)}</b><small>material conflict</small></div>
+        <div><b>${esc(b.violent)}</b><small>assault, fight, mass violence</small></div>
+        <div><b>${esc(pct)}%</b><small>confirmed by 2+ sources</small></div>
       </div>
 
       <h3 class="sec">Survey note &middot; generated</h3>
@@ -635,21 +658,21 @@ async function openInset(iso3, name, feature) {
         <h3 class="sec">Headlines</h3>
         ${d.headlines.map(h => `
           <div class="row">
-            <div class="who"><a href="${h.url}" target="_blank" rel="noopener">${h.title}</a></div>
-            <div class="m">${h.source}${h.published ? " &middot; " + h.published.slice(0, 16) : ""}</div>
+            <div class="who">${sourceLink(h.url, h.title)}</div>
+            <div class="m">${esc(h.source)}${h.published ? " &middot; " + esc(h.published.slice(0, 16)) : ""}</div>
             ${h.entities && h.entities.length ? `<div class="chips">${
-              h.entities.slice(0, 6).map(e => `<span class="chip">${e.text}</span>`).join("")
+              h.entities.slice(0, 6).map(e => `<span class="chip">${esc(e.text)}</span>`).join("")
             }</div>` : ""}
           </div>`).join("")}` : ""}
 
       <h3 class="sec">Events</h3>
       ${d.events.map(e => `
         <div class="row">
-          <div class="who">${e.actor1 || "Unattributed"} &rarr; ${e.actor2 || "Unattributed"}
-            &middot; ${CAMEO_ROOT[e.cameo_root] || e.cameo_root}${confMark(e.confidence)}</div>
-          <div class="m">${e.date}${e.place ? " &middot; " + e.place : ""} &middot;
-            ${e.articles} articles${e.url
-              ? ` &middot; <a href="${e.url}" target="_blank" rel="noopener">source</a>` : ""}</div>
+          <div class="who">${esc(e.actor1 || "Unattributed")} &rarr; ${esc(e.actor2 || "Unattributed")}
+            &middot; ${esc(CAMEO_ROOT[e.cameo_root] || e.cameo_root)}${confMark(e.confidence)}</div>
+          <div class="m">${esc(e.date)}${e.place ? " &middot; " + esc(e.place) : ""} &middot;
+            ${esc(e.articles)} articles${safeUrl(e.url)
+              ? ` &middot; ${sourceLink(e.url, "source")}` : ""}</div>
         </div>`).join("")}
     </div>`;
 
@@ -721,10 +744,10 @@ async function loadRelations(iso3) {
     if (!rows.length) return;
     el.innerHTML = `<h3 class="sec">Reported actions</h3>` + rows.map(r => `
       <div class="row">
-        <div class="who"><b>${r.actor}</b> <span class="act">${r.action}</span>
-          <b>${r.target}</b>${r.instrument
-            ? ` <span style="color:var(--ink-2)">using ${r.instrument}</span>` : ""}</div>
-        <div class="m"><a href="${r.url}" target="_blank" rel="noopener">source</a></div>
+        <div class="who"><b>${esc(r.actor)}</b> <span class="act">${esc(r.action)}</span>
+          <b>${esc(r.target)}</b>${r.instrument
+            ? ` <span style="color:var(--ink-2)">using ${esc(r.instrument)}</span>` : ""}</div>
+        <div class="m">${sourceLink(r.url, "source")}</div>
       </div>`).join("");
   } catch { /* extractor has not run */ }
 }
@@ -737,8 +760,8 @@ async function loadRelated(iso3) {
     if (!rows.length) return;
     el.innerHTML = `<h3 class="sec">Adjoining areas &middot; shared actors</h3>
       <div class="chips" style="margin-top:9px">` + rows.map(r =>
-        `<button class="chip" title="Linked via ${(r.via || []).join(", ")}"
-          onclick="openInset('${r.iso3}','${r.iso3}',null)">${r.iso3} &middot; ${r.links}</button>`
+        `<button class="chip" title="Linked via ${esc((r.via || []).join(", "))}"
+          onclick="openInset('${isoAttr(r.iso3)}')">${esc(r.iso3)} &middot; ${esc(r.links)}</button>`
       ).join("") + `</div>`;
   } catch { /* graph offline */ }
 }
@@ -769,7 +792,7 @@ async function loadSummary(iso3) {
 function getWatchlist() {
   try { return JSON.parse(localStorage.watchlist || "[]"); } catch { return []; }
 }
-function toggleWatch(iso3, name) {
+function toggleWatch(iso3) {
   let w = getWatchlist();
   if (w.includes(iso3)) w = w.filter(x => x !== iso3);
   else {
@@ -811,15 +834,15 @@ document.getElementById("search").addEventListener("keydown", async ev => {
   inset.innerHTML = insetHead(q, "Index search") + `<div class="pad">
     ${d.articles.length ? `<h3 class="sec">News</h3>` + d.articles.map(a => `
       <div class="row">
-        <div class="who"><a href="${a.url}" target="_blank" rel="noopener">${a.title}</a></div>
-        <div class="m">${a.source}${(a.countries || []).length
-          ? " &middot; " + a.countries.join(", ") : ""}</div>
+        <div class="who">${sourceLink(a.url, a.title)}</div>
+        <div class="m">${esc(a.source)}${(a.countries || []).length
+          ? " &middot; " + esc(a.countries.join(", ")) : ""}</div>
       </div>`).join("") : ""}
     ${d.events.length ? `<h3 class="sec">Events</h3>` + d.events.map(e => `
       <div class="row">
-        <div class="who">${e.actor1 || "Unattributed"} &rarr; ${e.actor2 || "Unattributed"}</div>
-        <div class="m">${e.date} &middot; ${e.iso3}${e.place ? " &middot; " + e.place : ""}
-          ${e.url ? ` &middot; <a href="${e.url}" target="_blank" rel="noopener">source</a>` : ""}</div>
+        <div class="who">${esc(e.actor1 || "Unattributed")} &rarr; ${esc(e.actor2 || "Unattributed")}</div>
+        <div class="m">${esc(e.date)} &middot; ${esc(e.iso3)}${e.place ? " &middot; " + esc(e.place) : ""}
+          ${safeUrl(e.url) ? ` &middot; ${sourceLink(e.url, "source")}` : ""}</div>
       </div>`).join("") : ""}
     ${!d.articles.length && !d.events.length
       ? `<p class="note pending">Nothing in the index matches that.</p>` : ""}
