@@ -1,0 +1,37 @@
+# Runs the unit test suite on every push and pull request.
+#
+# The suite needs no services. tests/conftest.py puts the repo root and
+# collector/ on sys.path, and both modules under test connect to Postgres
+# lazily inside functions, so importing them touches nothing external.
+#
+# Dependencies are installed explicitly rather than from requirements.txt:
+# that file pins gliner, which pulls torch -- hundreds of megabytes for a
+# package no test imports. Listed here is exactly what api/main.py and
+# collector/gdelt_collector.py import at module level.
+
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+          python -m pip install fastapi "psycopg[binary]" requests
+
+      - name: Run tests
+        run: python -m pytest -v
