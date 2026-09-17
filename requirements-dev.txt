@@ -7,3 +7,7 @@
 #   python -m pytest
 
 pytest==9.0.3
+
+# Coverage for the SonarCloud scan; `pytest --cov-report=xml` writes the
+# coverage.xml that sonar-project.properties points at.
+pytest-cov==7.1.0
