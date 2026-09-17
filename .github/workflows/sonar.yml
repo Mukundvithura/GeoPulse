@@ -1,19 +1,24 @@
-# Runs SonarCloud static analysis on every push and pull request.
+# Runs SonarQube Cloud static analysis from CI, on demand.
 #
 # Kept separate from test.yml so the test suite stays a plain, secretless job:
-# this one needs SONAR_TOKEN, and a fork PR never gets it. The scan step is
-# skipped rather than failed when the token is absent, so the workflow is not
-# red for anyone who has not configured it.
+# this one needs SONAR_TOKEN. The scan step is skipped rather than failed when
+# the token is absent, so a run without the secret is not red.
 #
 # Coverage is produced here rather than imported from the tests workflow --
 # a second pytest run is a second of CI, and passing coverage.xml between
 # workflows needs artifacts for no gain.
+#
+# DORMANT: the project currently uses SonarQube Cloud's Automatic Analysis,
+# configured in .sonarcloud.properties. The two modes are mutually exclusive --
+# a CI scan run while Automatic Analysis is on fails outright. So this is
+# workflow_dispatch only. To switch to CI analysis: turn Automatic Analysis off
+# in the project's Administration > Analysis Method, add the SONAR_TOKEN repo
+# secret, and restore the `push:` / `pull_request:` triggers below.
 
 name: sonar
 
 on:
-  push:
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   scan:
