@@ -1,0 +1,51 @@
+# Runs SonarCloud static analysis on every push and pull request.
+#
+# Kept separate from test.yml so the test suite stays a plain, secretless job:
+# this one needs SONAR_TOKEN, and a fork PR never gets it. The scan step is
+# skipped rather than failed when the token is absent, so the workflow is not
+# red for anyone who has not configured it.
+#
+# Coverage is produced here rather than imported from the tests workflow --
+# a second pytest run is a second of CI, and passing coverage.xml between
+# workflows needs artifacts for no gain.
+
+name: sonar
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+
+    # Declared on the job so the scan step's `if` can read it; a fork PR
+    # resolves it to the empty string.
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+    steps:
+      # Full history: SonarCloud blames each line to date the new-code period.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      # Same explicit dependency list as test.yml, for the same reason:
+      # requirements.txt pins gliner, which pulls torch.
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+          python -m pip install fastapi "psycopg[binary]" requests
+
+      - name: Run tests with coverage
+        run: python -m pytest --cov=api --cov=collector --cov=config --cov-report=xml
+
+      - name: SonarCloud scan
+        if: ${{ env.SONAR_TOKEN != '' }}
+        uses: SonarSource/sonarqube-scan-action@v5
